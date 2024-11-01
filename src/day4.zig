@@ -40,7 +40,9 @@ const expect = std.testing.expect;
 const stdout = std.io.getStdOut().writer();
 const Chameleon = @import("chameleon.zig");
 
-pub fn score_card(card: []const u8) !u32 {
+const card_score = struct { number: u32, score: u32, num_match: u32 };
+
+pub fn score_card(card: []const u8) !card_score {
     // Print in color
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
@@ -104,15 +106,21 @@ pub fn score_card(card: []const u8) !u32 {
 
     // Count winnings
     var winnings: u32 = 0;
+    var num_matches: u32 = 0;
     var it2 = leftset.iterator();
     while (it2.next()) |leftsetitem| {
         if (rightset.contains(leftsetitem.*)) {
             winnings = if (winnings == 0) 1 else winnings * 2;
+            num_matches += 1;
         }
     }
     std.debug.print("winnings: {d}\n", .{winnings});
+    std.debug.print("matches: {d}\n", .{num_matches});
 
-    return winnings;
+    //const card_score = struct{
+    //    number: u32,
+    //    score: u32};
+    return card_score{ .number = card_num, .score = winnings, .num_match = num_matches };
 }
 
 pub fn main() !void {
@@ -152,12 +160,32 @@ pub fn main() !void {
     defer c.deinit();
     try c.green().bold().printOut("Hello, world!\n", .{});
 
+    // I know there are 192 scratchcards. Maybe soon I will just initialize to 0 and add 1 when we actually encounter it
+    // The for loop adds 1 to scratchcard's own copy, so we can now initialize to 0
+    var scratchcard_copies: [192]u64 = [_]u64{0} ** 192;
+
     var total_points: u32 = 0;
     while (try in_stream.readUntilDelimiterOrEofAlloc(allocator, '\n', 1024)) |line| {
         try list.append(line);
 
-        total_points += try score_card(line);
+        const card = try score_card(line);
+        total_points += card.score;
+        try c.blue().bold().printOut("{any}\n", .{card_score});
+        scratchcard_copies[card.number - 1] += 1; // Count the current card once
+        const curcard_copies = scratchcard_copies[card.number - 1];
+        // card's own number is 1 more than index into scratchcard_copies
+        for (card.number..card.number + card.num_match) |index| {
+            scratchcard_copies[index] += curcard_copies;
+            try c.cyan().bold().printOut(" +{d} to {d} ", .{ curcard_copies, index });
+        }
     }
 
     try c.red().bold().printOut("\n total scratchcard points: {d}\n", .{total_points});
+    try c.red().bold().printOut("\n scratchcard array: {any}\n", .{scratchcard_copies});
+
+    var total_scratchcard_copies: u64 = 0;
+    for (scratchcard_copies) |numcopies| {
+        total_scratchcard_copies += numcopies;
+    }
+    try c.red().bold().printOut("\n total scratchcard copies: {d}\n", .{total_scratchcard_copies});
 }
